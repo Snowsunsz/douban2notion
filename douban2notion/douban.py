@@ -163,8 +163,7 @@ def insert_movie(douban_name,notion_helper):
                 parent=parent, properties=properties, icon=get_icon(cover)
             )
 
-
-def insert_book(douban_name,notion_helper):
+def insert_book(douban_name, notion_helper):
     notion_books = notion_helper.query_all(database_id=notion_helper.book_database_id)
     notion_book_dict = {}
     for i in notion_books:
@@ -176,6 +175,7 @@ def insert_book(douban_name,notion_helper):
             "状态": book.get("状态"),
             "日期": book.get("日期"),
             "评分": book.get("评分"),
+            "出版年": book.get("出版年"),  # 添加出版年
             "page_id": i.get("id")
         }
     print(f"notion {len(notion_book_dict)}")
@@ -187,31 +187,40 @@ def insert_book(douban_name,notion_helper):
         subject = result.get("subject")
         book["书名"] = subject.get("title")
         create_time = result.get("create_time")
-        create_time = pendulum.parse(create_time,tz=utils.tz)
-        #时间上传到Notion会丢掉秒的信息，这里直接将秒设置为0
+        create_time = pendulum.parse(create_time, tz=utils.tz)
+        # 时间上传到 Notion 会丢掉秒的信息，这里直接将秒设置为 0
         create_time = create_time.replace(second=0)
         book["日期"] = create_time.int_timestamp
         book["豆瓣链接"] = subject.get("url")
         book["状态"] = book_status.get(result.get("status"))
+
+        # 提取出版年
+        pubdate = subject.get("pubdate", "")
+        if pubdate:
+            # 提取年份（假设 pubdate 是类似 "2023-01-01" 或 "2023年" 的格式）
+            year_match = re.search(r"\d{4}", pubdate)
+            if year_match:
+                book["出版年"] = int(year_match.group(0))
+
         if result.get("rating"):
             book["评分"] = rating.get(result.get("rating").get("value"))
         if result.get("comment"):
             book["短评"] = result.get("comment")
         if notion_book_dict.get(book.get("豆瓣链接")):
-            notion_movive = notion_book_dict.get(book.get("豆瓣链接"))
+            notion_book = notion_book_dict.get(book.get("豆瓣链接"))
             if (
-                notion_movive.get("日期") != book.get("日期")
-                or notion_movive.get("短评") != book.get("短评")
-                or notion_movive.get("状态") != book.get("状态")
-                or notion_movive.get("评分") != book.get("评分")
+                notion_book.get("日期") != book.get("日期")
+                or notion_book.get("短评") != book.get("短评")
+                or notion_book.get("状态") != book.get("状态")
+                or notion_book.get("评分") != book.get("评分")
+                or notion_book.get("出版年") != book.get("出版年")  # 检查出版年是否变化
             ):
                 properties = utils.get_properties(book, book_properties_type_dict)
-                notion_helper.get_date_relation(properties,create_time)
+                notion_helper.get_date_relation(properties, create_time)
                 notion_helper.update_page(
-                    page_id=notion_movive.get("page_id"),
+                    page_id=notion_book.get("page_id"),
                     properties=properties
-            )
-
+                )
         else:
             print(f"插入{book.get('书名')}")
             cover = subject.get("pic").get("large")
@@ -237,7 +246,7 @@ def insert_book(douban_name,notion_helper):
                     for x in subject.get("author")[0:100]
                 ]
             properties = utils.get_properties(book, book_properties_type_dict)
-            notion_helper.get_date_relation(properties,create_time)
+            notion_helper.get_date_relation(properties, create_time)
             parent = {
                 "database_id": notion_helper.book_database_id,
                 "type": "database_id",
@@ -245,6 +254,8 @@ def insert_book(douban_name,notion_helper):
             notion_helper.create_page(
                 parent=parent, properties=properties, icon=get_icon(cover)
             )
+
+        
 
      
 def main():
